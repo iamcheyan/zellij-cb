@@ -28,7 +28,7 @@ pub fn render_tab(text: String, tab: &TabInfo, user_conf: UserConfiguration) -> 
 
     // Tmux style: [position] name* (1-based)
     let active_indicator = if tab.active { "*" } else { "" };
-    let tab_text = format!("[{}] {}{}", tab.position + 1, text, active_indicator);
+    let tab_text = format!("[{}]{}{}", tab.position + 1, text, active_indicator);
     let tab_right_padding = " ";
     let tab_left_padding = if tab.position == 0 {
         ""

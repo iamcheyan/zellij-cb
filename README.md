@@ -1,48 +1,48 @@
 # zellij-cb
 
-这是一个基于 [ndavd/zellij-cb](https://github.com/ndavd/zellij-cb) 的 fork。项目在保留原始实现与 MIT 许可的基础上，针对状态栏的视觉效果与交互细节做了若干调整，旨在为 Zellij 提供更接近 tmux 的使用体验。
+A fork of [ndavd/zellij-cb](https://github.com/ndavd/zellij-cb). Built on top of the original implementation and MIT license, this fork includes visual and interaction refinements to the status bar, aiming to provide a closer tmux-like experience within Zellij.
 
 ![screenshot](image.png)
 
-## 功能特点
+## Features
 
-- 以 tmux 风格展示标签：例如 `[1] name*`
-- 使用绿色背景与深色文字，营造更接近 tmux 的视觉效果
-- 在状态栏底部展示当前模式下可用的快捷键提示
-- 在左侧显示会话名称，并优化布局与对齐表现
+- Displays tabs in tmux style: e.g. `[1]name*`
+- Green background with dark text for a tmux-inspired look
+- Shows available keybindings for the current mode in the status bar
+- Displays the session name on the left with improved layout and alignment
 
-## 示例效果
+## Preview
 
 ```text
- main  [1] zsh*  [2] vim
+ main  [1]zsh*  [2]vim
  g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION
 ```
 
-## 安装说明
+## Installation
 
-### 1. 构建插件
+### 1. Build the plugin
 
-请确保已安装 Rust 工具链，并配置 `wasm32-wasip1` 目标。
+Make sure you have the Rust toolchain installed with the `wasm32-wasip1` target.
 
 ```bash
 make
 ```
 
-生成结果位于：
+The output will be located at:
 
 ```text
 target/wasm32-wasip1/release/zellij-cb.wasm
 ```
 
-### 2. 放置到 Zellij 插件目录
+### 2. Copy to the Zellij plugins directory
 
 ```bash
 cp target/wasm32-wasip1/release/zellij-cb.wasm ~/.config/zellij/plugins/
 ```
 
-## 配置方式
+## Configuration
 
-在 `~/.config/zellij/config.kdl` 中注册插件：
+Register the plugin in `~/.config/zellij/config.kdl`:
 
 ```kdl
 plugins {
@@ -50,7 +50,7 @@ plugins {
 }
 ```
 
-在布局中使用：
+Use it in a layout:
 
 ```kdl
 layout {
@@ -67,20 +67,20 @@ layout {
 }
 ```
 
-## 配置项
+## Options
 
-| 选项 | 说明 | 默认值 |
+| Option | Description | Default |
 |---|---|---:|
-| `DefaultTabName` | 未命名标签的默认名称 | `tab` |
-| `DisplaySessionDirectory` | 是否在状态栏中显示会话目录 | `false` |
-| `FgColor` | 前景色（8-bit 或 RGB） | `0` |
-| `BgColor` | 背景色（8-bit 或 RGB） | `10` |
+| `DefaultTabName` | Default name for unnamed tabs | `tab` |
+| `DisplaySessionDirectory` | Whether to show the session directory in the status bar | `false` |
+| `FgColor` | Foreground color (8-bit or RGB) | `0` |
+| `BgColor` | Background color (8-bit or RGB) | `10` |
 
-## 模式提示栏
+## Mode hint bar
 
-底部提示栏会根据当前模式显示不同的快捷键提示：
+The hint bar at the bottom shows context-sensitive keybindings depending on the current mode:
 
-| 模式 | 提示内容 |
+| Mode | Hints |
 |---|---|
 | Normal | `g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION` |
 | Locked | `g:UNLOCK` |
@@ -90,11 +90,10 @@ layout {
 | Move | `[MOVE] h/j/k/l: Move Pane` |
 | Scroll | `[SCROLL] u/d: Half Pg U/D Up/Down /: Search` |
 
-## 说明
+## Notes
 
-这个版本的目标并不是重写整个插件，而是在现有实现基础上做一组更贴近 tmux 风格的视觉与交互调整。对于希望在 Zellij 中获得更统一、更熟悉的状态栏体验的用户而言，这个 fork 是一个实用的选择。
+This fork does not aim to rewrite the plugin from scratch. Instead, it applies a focused set of visual and interaction tweaks to bring the status bar closer to the tmux experience. It is a practical option for users who want a more consistent and familiar status bar in Zellij.
 
-## 致谢与许可
+## Credits & License
 
-本项目基于原作者 [Nuno David](https://github.com/ndavd) 的实现开发，并保留原始 MIT 许可证。
-
+This project is based on the original work by [Nuno David](https://github.com/ndavd) and retains the original MIT license.
