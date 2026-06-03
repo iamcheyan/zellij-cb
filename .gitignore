@@ -1,1 +1,69 @@
-/target
+# Rust build artifacts
+/target/
+**/target/
+
+# WebAssembly outputs
+*.wasm
+*.wasm.map
+pkg/
+
+# Generated artifacts
+**/*.rlib
+**/*.rmeta
+**/*.d
+**/*.dSYM
+**/*.so
+**/*.dylib
+**/*.dll
+**/*.exe
+
+# Cargo incremental / fingerprint
+/target/**/incremental/
+/target/**/fingerprint/
+
+# Documentation
+/target/doc/
+docs/
+
+# Editor & IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swap / temp files
+*.swp
+*~
+*.tmp
+*.tmp.*
+.cache/
+
+# Environment files
+.env
+.env.*
+
+# Node / frontend
+node_modules/
+dist/
+build/
+npm-debug.log
+yarn-error.log
+
+# Logs
+*.log
+coverage/
+
+# Misc
+.cargo-install/
+*.pem
+*.crt
+
+# Keep or ignore Cargo.lock?
+# - For libraries: it's common to NOT commit Cargo.lock
+# - For binaries/applications: commit Cargo.lock for reproducible builds
+# Uncomment the following line to ignore Cargo.lock for library-style repos
+# Cargo.lock
