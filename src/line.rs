@@ -233,8 +233,8 @@ pub fn tab_line(
     active_tab_index: usize,
     cols: usize,
     user_conf: UserConfiguration,
-    mode: InputMode,
-    session_directory: String,
+    _mode: InputMode,
+    _session_directory: String,
 ) -> Vec<LinePart> {
     let mut tabs_after_active = all_tabs.split_off(active_tab_index);
     let mut tabs_before_active = all_tabs;
@@ -243,30 +243,71 @@ pub fn tab_line(
     } else {
         tabs_before_active.pop().unwrap()
     };
-    let mut prefix = tab_line_prefix(
-        session_name,
-        mode,
-        user_conf.clone(),
-        cols,
-        session_directory,
-    );
-    let prefix_len = get_current_title_len(&prefix);
 
-    // if active tab alone won't fit in cols, don't draw any tabs
-    if prefix_len + active_tab.len > cols {
-        return prefix;
-    }
+    // Session name prefix width
+    let session_text = format!("{} ", session_name);
+    let session_len = session_text.len();
 
+    // Tabs fill remaining space after session prefix
     let mut tabs_to_render = vec![active_tab];
 
     populate_tabs_in_tab_line(
         &mut tabs_before_active,
         &mut tabs_after_active,
         &mut tabs_to_render,
-        cols.saturating_sub(prefix_len),
-        user_conf,
+        cols.saturating_sub(session_len),
+        user_conf.clone(),
     );
-    prefix.append(&mut tabs_to_render);
 
-    prefix
+    // Prepend session name
+    let bg_color = user_conf.color_bg;
+    let fg_color = user_conf.color_fg;
+    let session_styled = style!(fg_color, bg_color).bold().paint(session_text);
+    let session_part = LinePart {
+        part: session_styled.to_string(),
+        len: session_len,
+        tab_index: None,
+    };
+
+    let mut result = vec![session_part];
+    result.append(&mut tabs_to_render);
+    result
+}
+
+pub fn tab_line_suffix(
+    hostname: String,
+    datetime: String,
+    _cols: usize,
+    user_conf: UserConfiguration,
+) -> Vec<LinePart> {
+    let mut parts: Vec<LinePart> = Vec::new();
+
+    let bg_color = user_conf.color_bg;
+    let fg_color = user_conf.color_fg;
+
+    // Build the full right-side text: "hostname"  HH:MM  DD-Mon-YY
+    let mut right_text = String::new();
+
+    if !hostname.is_empty() {
+        right_text.push_str(&format!("\"{}\"", hostname));
+    }
+
+    if !datetime.is_empty() {
+        if !right_text.is_empty() {
+            right_text.push_str("  ");
+        }
+        right_text.push_str(&datetime);
+    }
+
+    if !right_text.is_empty() {
+        let right_len = right_text.len();
+        let right_styled = style!(fg_color, bg_color).bold().paint(right_text);
+        parts.push(LinePart {
+            part: right_styled.to_string(),
+            len: right_len,
+            tab_index: None,
+        });
+    }
+
+    parts
 }

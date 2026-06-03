@@ -7,8 +7,10 @@ use std::convert::TryInto;
 
 use tab::get_tab_to_focus;
 use zellij_tile::prelude::*;
+use zellij_tile_utils::style;
 
 use crate::line::tab_line;
+use crate::line::tab_line_suffix;
 use crate::tab::tab_style;
 
 #[derive(Debug, Default)]
@@ -27,6 +29,8 @@ struct State {
     mode_info: ModeInfo,
     tab_line: Vec<LinePart>,
     session_directory: String,
+    hostname: String,
+    datetime: String,
 }
 
 register_plugin!(State);
@@ -97,7 +101,7 @@ impl UserConfiguration {
     }
     pub fn populate_from_configuration(
         configuration: &BTreeMap<String, String>,
-        colors: &Styling,
+        _colors: &Styling,
     ) -> Self {
         let mode_display: HashMap<InputMode, String> = [
             InputMode::Normal,
@@ -135,44 +139,41 @@ impl UserConfiguration {
         })
         .collect();
 
-        let white = colors.text_selected.base;
-        let black = colors.text_unselected.background;
-        let gray = colors.text_selected.background;
-        let green = colors.text_selected.emphasis_2;
-        let gold = colors.exit_code_error.emphasis_1;
-        let orange = colors.text_selected.emphasis_0;
+        // Tmux-like colors: black text on green background
+        let tmux_green = PaletteColor::EightBit(10); // Bright green (ANSI 10)
+        let tmux_black = PaletteColor::EightBit(0);  // Black (ANSI 0)
 
         Self {
             mode_display,
-            color_fg: Self::get_color_from_configuration(configuration, "FgColor", white),
-            color_bg: Self::get_color_from_configuration(configuration, "BgColor", black),
+            color_fg: Self::get_color_from_configuration(configuration, "FgColor", tmux_black),
+            color_bg: Self::get_color_from_configuration(configuration, "BgColor", tmux_green),
             color_session_directory: Self::get_color_from_configuration(
                 configuration,
                 "SessionDirectoryColor",
-                white,
+                tmux_black,
             ),
             color_session_name: Self::get_color_from_configuration(
                 configuration,
                 "SessionNameColor",
-                gray,
+                tmux_black,
             ),
-            color_tab: Self::get_color_from_configuration(configuration, "TabColor", gray),
+            color_tab: Self::get_color_from_configuration(configuration, "TabColor", tmux_black),
             color_active_tab: Self::get_color_from_configuration(
                 configuration,
                 "ActiveTabColor",
-                green,
+                tmux_black,
             ),
             color_normal_mode: Self::get_color_from_configuration(
                 configuration,
                 "NormalModeColor",
-                gold,
+                tmux_black,
             ),
             color_other_modes: Self::get_color_from_configuration(
                 configuration,
                 "OtherModesColor",
-                orange,
+                tmux_black,
             ),
-            color_others: Self::get_color_from_configuration(configuration, "OthersColor", orange),
+            color_others: Self::get_color_from_configuration(configuration, "OthersColor", tmux_black),
             default_tab_name: Self::get_string_from_configuration(
                 configuration,
                 "DefaultTabName",
@@ -193,6 +194,18 @@ fn pwd() {
     run_command(&["pwd"], context);
 }
 
+fn get_hostname() {
+    let mut context = BTreeMap::new();
+    context.insert("type".to_string(), "hostname".to_string());
+    run_command(&["hostname"], context);
+}
+
+fn get_datetime() {
+    let mut context = BTreeMap::new();
+    context.insert("type".to_string(), "datetime".to_string());
+    run_command(&["date", "+%H:%M  %d-%b-%y"], context);
+}
+
 impl ZellijPlugin for State {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
         request_permission(&[
@@ -208,6 +221,7 @@ impl ZellijPlugin for State {
             EventType::RunCommandResult,
         ]);
         self.configuration = _configuration;
+        get_hostname();
     }
 
     fn update(&mut self, event: Event) -> bool {
@@ -216,14 +230,29 @@ impl ZellijPlugin for State {
             Event::RunCommandResult(_exit_code, _stdout, _stderr, _context) => {
                 if let Some(value) = _context.get("type") {
                     let value: &str = value.as_ref();
-                    if value == "pwd" {
-                        self.session_directory = std::str::from_utf8(_stdout.as_slice())
-                            .unwrap()
-                            .trim()
-                            .split('/')
-                            .next_back()
-                            .unwrap()
-                            .to_string();
+                    match value {
+                        "pwd" => {
+                            self.session_directory = std::str::from_utf8(_stdout.as_slice())
+                                .unwrap()
+                                .trim()
+                                .split('/')
+                                .next_back()
+                                .unwrap()
+                                .to_string();
+                        }
+                        "hostname" => {
+                            self.hostname = std::str::from_utf8(_stdout.as_slice())
+                                .unwrap()
+                                .trim()
+                                .to_string();
+                        }
+                        "datetime" => {
+                            self.datetime = std::str::from_utf8(_stdout.as_slice())
+                                .unwrap()
+                                .trim()
+                                .to_string();
+                        }
+                        _ => {}
                     }
                 }
                 should_render = true;
@@ -234,11 +263,13 @@ impl ZellijPlugin for State {
                     &mode_info.style.colors,
                 );
                 self.mode_info = mode_info;
+                get_datetime();
                 should_render = true;
             }
             Event::TabUpdate(tabs) => {
                 self.active_tab_idx = tabs.iter().position(|t| t.active).unwrap() + 1;
                 self.tabs = tabs;
+                get_datetime();
                 should_render = true;
             }
             Event::Mouse(me) => match me {
@@ -259,7 +290,6 @@ impl ZellijPlugin for State {
             Event::PermissionRequestResult(_) => {
                 set_selectable(false);
                 pwd();
-                switch_to_input_mode(&InputMode::Locked);
             }
             _ => {
                 eprintln!("Got unrecognized event: {:?}", event);
@@ -289,27 +319,108 @@ impl ZellijPlugin for State {
             is_alternate_tab = !is_alternate_tab;
             all_tabs.push(tab);
         }
-        self.tab_line = tab_line(
+
+        // Reserve 2 chars for left/right padding
+        let usable_cols = cols.saturating_sub(2);
+
+        // Build right side (hostname, time, date) - disabled as requested
+        let right_line: Vec<LinePart> = vec![];
+        let right_width: usize = 0;
+
+        // Build left side (session name + tabs)
+        let left_line = tab_line(
             self.mode_info.session_name.clone().unwrap(),
             all_tabs,
             active_tab_index,
-            cols.saturating_sub(1),
+            usable_cols.saturating_sub(right_width),
             self.user_configuration.clone(),
             self.mode_info.mode,
             self.session_directory.clone(),
         );
-        let output = self
-            .tab_line
-            .iter()
-            .fold(String::new(), |output, part| output + &part.part);
+        self.tab_line = left_line;
+
+        let left_width: usize = self.tab_line.iter().map(|p| p.len).sum();
+
+        let mode_hint = get_mode_hint(self.mode_info.mode, self.user_configuration.clone());
+        let mode_hint_len = mode_hint.len;
+
+        // If there's enough space, align the mode hint to the very right
+        let has_space_for_hint = usable_cols.saturating_sub(left_width) >= mode_hint_len + 2; // at least 2 spaces padding
+
         let background = self.user_configuration.color_bg;
+        // Apply background color to padding area
+        let bg_escape = match background {
+            PaletteColor::Rgb((r, g, b)) => format!("\u{1b}[48;2;{};{};{}m", r, g, b),
+            PaletteColor::EightBit(color) => format!("\u{1b}[48;5;{}m", color),
+        };
+
+        let (padding_str, hint_part) = if has_space_for_hint {
+            let padding = usable_cols.saturating_sub(left_width + mode_hint_len);
+            (" ".repeat(padding), mode_hint.part)
+        } else {
+            let padding = usable_cols.saturating_sub(left_width);
+            (" ".repeat(padding), "".to_string())
+        };
+
+        // Combine left
+        // Re-apply bg after each styled part since style! resets it
+        let left_output: String = self.tab_line.iter().map(|p| format!("{}{}", p.part, bg_escape)).collect();
+
+        let output = if has_space_for_hint {
+            format!(
+                " {}{}{}{}{} ",
+                left_output,
+                bg_escape,
+                padding_str,
+                hint_part,
+                bg_escape
+            )
+        } else {
+            format!(
+                " {}{}{} ",
+                left_output,
+                bg_escape,
+                padding_str
+            )
+        };
+
         match background {
             PaletteColor::Rgb((r, g, b)) => {
-                print!("{}\u{1b}[48;2;{};{};{}m\u{1b}[0K", output, r, g, b);
+                print!("\u{1b}[48;2;{};{};{}m{}", r, g, b, output);
             }
             PaletteColor::EightBit(color) => {
-                print!("{}\u{1b}[48;5;{}m\u{1b}[0K", output, color);
+                print!("\u{1b}[48;5;{}m{}", color, output);
             }
         }
+    }
+}
+
+fn get_mode_hint(mode: InputMode, user_conf: UserConfiguration) -> LinePart {
+    let bg_color = user_conf.color_bg;
+    let fg_color = user_conf.color_fg;
+    
+    let text = match mode {
+        InputMode::Normal => "g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION",
+        InputMode::Locked => "g:UNLOCK",
+        InputMode::Pane => "[PANE] n:New d:Down r:Right x:Close f:Full p:Next h/j/k/l:Move",
+        InputMode::Tab => "[TAB] n:New x:Close r:Rename h/l:Move s:Sync",
+        InputMode::Resize => "[RESIZE] h/j/k/l or +/-: Resize",
+        InputMode::Move => "[MOVE] h/j/k/l: Move Pane",
+        InputMode::Scroll => "[SCROLL] u/d: Half Pg U/D Up/Down /: Search",
+        InputMode::Search => "[SEARCH] Enter: Search n: Next p: Prev",
+        InputMode::EnterSearch => "[SEARCH] Type term, then press Enter",
+        InputMode::RenameTab => "[RENAME TAB] Type name, then press Enter",
+        InputMode::RenamePane => "[RENAME PANE] Type name, then press Enter",
+        InputMode::Session => "[SESSION] d: Detach w: Managers",
+        InputMode::Tmux => "[TMUX] d: Detach ?: Help",
+        _ => "Press Esc to exit mode",
+    };
+
+    let len = text.len();
+    let styled = style!(fg_color, bg_color).bold().paint(text);
+    LinePart {
+        part: styled.to_string(),
+        len,
+        tab_index: None,
     }
 }
