@@ -26,9 +26,9 @@ pub fn render_tab(text: String, tab: &TabInfo, user_conf: UserConfiguration) -> 
         })
         .unwrap_or(text);
 
-    // Tmux style: position:name* (1-based)
+    // Tmux style: [position]name* (1-based)
     let active_indicator = if tab.active { "*" } else { "" };
-    let tab_text = format!("{}:{}{} ", tab.position + 1, text, active_indicator);
+    let tab_text = format!("[{}]{}{} ", tab.position + 1, text, active_indicator);
     let tab_text_len = tab_text.len();
     let tab_styled_text = style!(foreground_color, background_color)
         .bold()
