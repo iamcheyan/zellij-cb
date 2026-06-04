@@ -245,7 +245,7 @@ pub fn tab_line(
     };
 
     // Session name prefix width
-    let session_text = format!("{} ", session_name);
+    let session_text = format!("[{}]  ", session_name);
     let session_len = session_text.len();
 
     // Tabs fill remaining space after session prefix
