@@ -20,25 +20,15 @@ A fork of [ndavd/zellij-cb](https://github.com/ndavd/zellij-cb). Built on top of
 
 ## Installation
 
-### 1. Build the plugin
+### 1. Build and install
 
 Make sure you have the Rust toolchain installed with the `wasm32-wasip1` target.
 
 ```bash
-make
+./build.sh
 ```
 
-The output will be located at:
-
-```text
-target/wasm32-wasip1/release/zellij-cb.wasm
-```
-
-### 2. Copy to the Zellij plugins directory
-
-```bash
-cp target/wasm32-wasip1/release/zellij-cb.wasm ~/.config/zellij/plugins/
-```
+This will compile the plugin and copy `zellij-cb.wasm` to `~/.config/zellij/plugins/`.
 
 ## Configuration
 
