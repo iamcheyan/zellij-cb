@@ -10,7 +10,6 @@ use zellij_tile::prelude::*;
 use zellij_tile_utils::style;
 
 use crate::line::tab_line;
-use crate::line::tab_line_suffix;
 use crate::tab::tab_style;
 
 #[derive(Debug, Default)]
@@ -28,9 +27,6 @@ struct State {
     user_configuration: UserConfiguration,
     mode_info: ModeInfo,
     tab_line: Vec<LinePart>,
-    session_directory: String,
-    hostname: String,
-    datetime: String,
 }
 
 register_plugin!(State);
@@ -141,7 +137,7 @@ impl UserConfiguration {
 
         // Tmux-like colors: black text on green background
         let tmux_green = PaletteColor::EightBit(10); // Bright green (ANSI 10)
-        let tmux_black = PaletteColor::EightBit(0);  // Black (ANSI 0)
+        let tmux_black = PaletteColor::EightBit(0); // Black (ANSI 0)
 
         Self {
             mode_display,
@@ -173,7 +169,11 @@ impl UserConfiguration {
                 "OtherModesColor",
                 tmux_black,
             ),
-            color_others: Self::get_color_from_configuration(configuration, "OthersColor", tmux_black),
+            color_others: Self::get_color_from_configuration(
+                configuration,
+                "OthersColor",
+                tmux_black,
+            ),
             default_tab_name: Self::get_string_from_configuration(
                 configuration,
                 "DefaultTabName",
@@ -188,88 +188,35 @@ impl UserConfiguration {
     }
 }
 
-fn pwd() {
-    let mut context = BTreeMap::new();
-    context.insert("type".to_string(), "pwd".to_string());
-    run_command(&["pwd"], context);
-}
-
-fn get_hostname() {
-    let mut context = BTreeMap::new();
-    context.insert("type".to_string(), "hostname".to_string());
-    run_command(&["hostname"], context);
-}
-
-fn get_datetime() {
-    let mut context = BTreeMap::new();
-    context.insert("type".to_string(), "datetime".to_string());
-    run_command(&["date", "+%H:%M  %d-%b-%y"], context);
-}
-
 impl ZellijPlugin for State {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
-            PermissionType::RunCommands,
         ]);
         subscribe(&[
             EventType::TabUpdate,
             EventType::ModeUpdate,
             EventType::Mouse,
             EventType::PermissionRequestResult,
-            EventType::RunCommandResult,
         ]);
         self.configuration = _configuration;
-        get_hostname();
     }
 
     fn update(&mut self, event: Event) -> bool {
         let mut should_render = false;
         match event {
-            Event::RunCommandResult(_exit_code, _stdout, _stderr, _context) => {
-                if let Some(value) = _context.get("type") {
-                    let value: &str = value.as_ref();
-                    match value {
-                        "pwd" => {
-                            self.session_directory = std::str::from_utf8(_stdout.as_slice())
-                                .unwrap()
-                                .trim()
-                                .split('/')
-                                .next_back()
-                                .unwrap()
-                                .to_string();
-                        }
-                        "hostname" => {
-                            self.hostname = std::str::from_utf8(_stdout.as_slice())
-                                .unwrap()
-                                .trim()
-                                .to_string();
-                        }
-                        "datetime" => {
-                            self.datetime = std::str::from_utf8(_stdout.as_slice())
-                                .unwrap()
-                                .trim()
-                                .to_string();
-                        }
-                        _ => {}
-                    }
-                }
-                should_render = true;
-            }
             Event::ModeUpdate(mode_info) => {
                 self.user_configuration = UserConfiguration::populate_from_configuration(
                     &self.configuration,
                     &mode_info.style.colors,
                 );
                 self.mode_info = mode_info;
-                get_datetime();
                 should_render = true;
             }
             Event::TabUpdate(tabs) => {
-                self.active_tab_idx = tabs.iter().position(|t| t.active).unwrap() + 1;
+                self.active_tab_idx = tabs.iter().position(|t| t.active).unwrap_or(0) + 1;
                 self.tabs = tabs;
-                get_datetime();
                 should_render = true;
             }
             Event::Mouse(me) => match me {
@@ -289,7 +236,6 @@ impl ZellijPlugin for State {
             },
             Event::PermissionRequestResult(_) => {
                 set_selectable(false);
-                pwd();
             }
             _ => {
                 eprintln!("Got unrecognized event: {:?}", event);
@@ -324,18 +270,17 @@ impl ZellijPlugin for State {
         let usable_cols = cols.saturating_sub(2);
 
         // Build right side (hostname, time, date) - disabled as requested
-        let right_line: Vec<LinePart> = vec![];
         let right_width: usize = 0;
 
         // Build left side (session name + tabs)
         let left_line = tab_line(
-            self.mode_info.session_name.clone().unwrap(),
+            self.mode_info.session_name.clone().unwrap_or_default(),
             all_tabs,
             active_tab_index,
             usable_cols.saturating_sub(right_width),
             self.user_configuration.clone(),
             self.mode_info.mode,
-            self.session_directory.clone(),
+            String::new(),
         );
         self.tab_line = left_line;
 
@@ -364,24 +309,19 @@ impl ZellijPlugin for State {
 
         // Combine left
         // Re-apply bg after each styled part since style! resets it
-        let left_output: String = self.tab_line.iter().map(|p| format!("{}{}", p.part, bg_escape)).collect();
+        let left_output: String = self
+            .tab_line
+            .iter()
+            .map(|p| format!("{}{}", p.part, bg_escape))
+            .collect();
 
         let output = if has_space_for_hint {
             format!(
                 " {}{}{}{}{} ",
-                left_output,
-                bg_escape,
-                padding_str,
-                hint_part,
-                bg_escape
+                left_output, bg_escape, padding_str, hint_part, bg_escape
             )
         } else {
-            format!(
-                " {}{}{} ",
-                left_output,
-                bg_escape,
-                padding_str
-            )
+            format!(" {}{}{} ", left_output, bg_escape, padding_str)
         };
 
         match background {
@@ -398,7 +338,7 @@ impl ZellijPlugin for State {
 fn get_mode_hint(mode: InputMode, user_conf: UserConfiguration) -> LinePart {
     let bg_color = user_conf.color_bg;
     let fg_color = user_conf.color_fg;
-    
+
     let text = match mode {
         InputMode::Normal => "g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION",
         InputMode::Locked => "g:UNLOCK",
