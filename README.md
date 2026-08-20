@@ -10,6 +10,7 @@ A fork of [ndavd/zellij-cb](https://github.com/ndavd/zellij-cb). Built on top of
 - Green background with dark text for a tmux-inspired look
 - Shows available keybindings for the current mode in the status bar
 - Displays the session name on the left with improved layout and alignment
+- Optionally displays the host name and IPv4 address using platform-compatible command fallbacks.
 
 ## Preview
 
@@ -27,12 +28,21 @@ Make sure you have the Rust toolchain installed with the `wasm32-wasip1` target.
 ```bash
 ./build.sh
 ```
+### Windows PowerShell
 
-This will compile the plugin and copy `zellij-cb.wasm` to `~/.config/zellij/plugins/`.
+PowerShell does not run `build.sh` by default. Use the included PowerShell script instead:
+
+```powershell
+.\build.ps1
+```
+
+The script installs the `wasm32-wasip1` target when needed and copies the plugin to
+`%APPDATA%\zellij\plugins\` (or `$env:ZELLIJ_CONFIG_DIR` when set).
 
 ## Configuration
 
-Register the plugin in `~/.config/zellij/config.kdl`:
+Register the plugin in `~/.config/zellij/config.kdl` on Unix-like systems, or
+`%APPDATA%\zellij\config.kdl` on Windows:
 
 ```kdl
 plugins {
@@ -49,12 +59,14 @@ layout {
         pane size=1 borderless=true {
             plugin location="zellij-cb" {
                 DisplaySessionDirectory "false"
+                DisplayHostInfo "true"
                 DefaultTabName "tab"
             }
         }
     }
     tab name="main"
 }
+
 ```
 
 ## Options
@@ -63,6 +75,7 @@ layout {
 |---|---|---:|
 | `DefaultTabName` | Default name for unnamed tabs | `tab` |
 | `DisplaySessionDirectory` | Whether to show the session directory in the status bar | `false` |
+| `DisplayHostInfo` | Whether to show the host name and IPv4 address | `false` |
 | `FgColor` | Foreground color (8-bit or RGB) | `0` |
 | `BgColor` | Background color (8-bit or RGB) | `10` |
 

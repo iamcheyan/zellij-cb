@@ -1,3 +1,4 @@
+mod host_info;
 mod line;
 mod tab;
 
@@ -5,11 +6,12 @@ use std::cmp::{max, min};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 
+use host_info::{parse_hostname, parse_ipv4_address, HOSTNAME_COMMAND, IP_COMMANDS};
 use tab::get_tab_to_focus;
 use zellij_tile::prelude::*;
 use zellij_tile_utils::style;
 
-use crate::line::tab_line;
+use crate::line::{tab_line, tab_line_suffix};
 use crate::tab::tab_style;
 
 #[derive(Debug, Default)]
@@ -18,7 +20,6 @@ pub struct LinePart {
     len: usize,
     tab_index: Option<usize>,
 }
-
 #[derive(Default)]
 struct State {
     tabs: Vec<TabInfo>,
@@ -27,6 +28,9 @@ struct State {
     user_configuration: UserConfiguration,
     mode_info: ModeInfo,
     tab_line: Vec<LinePart>,
+    hostname: String,
+    ip_address: String,
+    host_info_requested: bool,
 }
 
 register_plugin!(State);
@@ -43,6 +47,7 @@ pub struct UserConfiguration {
     color_other_modes: PaletteColor,
     color_others: PaletteColor,
     display_session_directory: bool,
+    display_host_info: bool,
     default_tab_name: String,
     mode_display: HashMap<InputMode, String>,
 }
@@ -184,28 +189,69 @@ impl UserConfiguration {
                 "DisplaySessionDirectory",
                 true,
             ),
+            display_host_info: Self::get_bool_from_configuration(
+                configuration,
+                "DisplayHostInfo",
+                false,
+            ),
         }
     }
 }
 
+fn request_host_info() {
+    let mut hostname_context = BTreeMap::new();
+    hostname_context.insert("type".to_string(), "hostname".to_string());
+    run_command(HOSTNAME_COMMAND, hostname_context);
+
+    for command in IP_COMMANDS {
+        let mut ip_context = BTreeMap::new();
+        ip_context.insert("type".to_string(), "ip_address".to_string());
+        run_command(command, ip_context);
+    }
+}
+
+fn update_host_info(state: &mut State, stdout: &[u8], context: &BTreeMap<String, String>) -> bool {
+    match context.get("type").map(String::as_str) {
+        Some("hostname") => parse_hostname(stdout)
+            .map(|hostname| state.hostname = hostname)
+            .is_some(),
+        Some("ip_address") => parse_ipv4_address(stdout)
+            .map(|ip_address| state.ip_address = ip_address)
+            .is_some(),
+        _ => false,
+    }
+}
+
 impl ZellijPlugin for State {
-    fn load(&mut self, _configuration: BTreeMap<String, String>) {
-        request_permission(&[
+    fn load(&mut self, configuration: BTreeMap<String, String>) {
+        self.configuration = configuration;
+        let mut permissions = vec![
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
-        ]);
+        ];
+        if UserConfiguration::get_bool_from_configuration(
+            &self.configuration,
+            "DisplayHostInfo",
+            false,
+        ) {
+            permissions.push(PermissionType::RunCommands);
+        }
+        request_permission(&permissions);
         subscribe(&[
             EventType::TabUpdate,
             EventType::ModeUpdate,
             EventType::Mouse,
             EventType::PermissionRequestResult,
+            EventType::RunCommandResult,
         ]);
-        self.configuration = _configuration;
     }
 
     fn update(&mut self, event: Event) -> bool {
         let mut should_render = false;
         match event {
+            Event::RunCommandResult(_exit_code, stdout, _stderr, context) => {
+                should_render = update_host_info(self, &stdout, &context);
+            }
             Event::ModeUpdate(mode_info) => {
                 self.user_configuration = UserConfiguration::populate_from_configuration(
                     &self.configuration,
@@ -236,6 +282,15 @@ impl ZellijPlugin for State {
             },
             Event::PermissionRequestResult(_) => {
                 set_selectable(false);
+                if UserConfiguration::get_bool_from_configuration(
+                    &self.configuration,
+                    "DisplayHostInfo",
+                    false,
+                ) && !self.host_info_requested
+                {
+                    request_host_info();
+                    self.host_info_requested = true;
+                }
             }
             _ => {
                 eprintln!("Got unrecognized event: {:?}", event);
@@ -266,18 +321,31 @@ impl ZellijPlugin for State {
             all_tabs.push(tab);
         }
 
-        // Reserve 2 chars for left/right padding
+        // Reserve 2 chars for left/right padding.
         let usable_cols = cols.saturating_sub(2);
+        let mode_hint = get_mode_hint(self.mode_info.mode, self.user_configuration.clone());
+        let host_line = if self.user_configuration.display_host_info {
+            tab_line_suffix(
+                self.hostname.clone(),
+                self.ip_address.clone(),
+                usable_cols,
+                self.user_configuration.clone(),
+            )
+            .into_iter()
+            .next()
+        } else {
+            None
+        };
+        let host_width = host_line.as_ref().map_or(0, |part| part.len);
+        let host_gap = if host_width > 0 { 2 } else { 0 };
+        let reserved_right_width = mode_hint.len + host_gap + host_width;
 
-        // Build right side (hostname, time, date) - disabled as requested
-        let right_width: usize = 0;
-
-        // Build left side (session name + tabs)
+        // Build left side (session name + tabs), leaving room for hints and host info.
         let left_line = tab_line(
             self.mode_info.session_name.clone().unwrap_or_default(),
             all_tabs,
             active_tab_index,
-            usable_cols.saturating_sub(right_width),
+            usable_cols.saturating_sub(reserved_right_width),
             self.user_configuration.clone(),
             self.mode_info.mode,
             String::new(),
@@ -285,43 +353,37 @@ impl ZellijPlugin for State {
         self.tab_line = left_line;
 
         let left_width: usize = self.tab_line.iter().map(|p| p.len).sum();
-
-        let mode_hint = get_mode_hint(self.mode_info.mode, self.user_configuration.clone());
-        let mode_hint_len = mode_hint.len;
-
-        // If there's enough space, align the mode hint to the very right
-        let has_space_for_hint = usable_cols.saturating_sub(left_width) >= mode_hint_len + 2; // at least 2 spaces padding
+        let has_space_for_right = usable_cols.saturating_sub(left_width) >= reserved_right_width;
 
         let background = self.user_configuration.color_bg;
-        // Apply background color to padding area
+        // Apply background color to padding area.
         let bg_escape = match background {
             PaletteColor::Rgb((r, g, b)) => format!("\u{1b}[48;2;{};{};{}m", r, g, b),
             PaletteColor::EightBit(color) => format!("\u{1b}[48;5;{}m", color),
         };
 
-        let (padding_str, hint_part) = if has_space_for_hint {
-            let padding = usable_cols.saturating_sub(left_width + mode_hint_len);
-            (" ".repeat(padding), mode_hint.part)
-        } else {
-            let padding = usable_cols.saturating_sub(left_width);
-            (" ".repeat(padding), "".to_string())
-        };
-
-        // Combine left
-        // Re-apply bg after each styled part since style! resets it
         let left_output: String = self
             .tab_line
             .iter()
             .map(|p| format!("{}{}", p.part, bg_escape))
             .collect();
-
-        let output = if has_space_for_hint {
+        let output = if has_space_for_right {
+            let padding = usable_cols.saturating_sub(left_width + reserved_right_width);
+            let host_part = host_line.map_or_else(String::new, |part| {
+                format!("{}{}{}", " ".repeat(host_gap), part.part, bg_escape)
+            });
             format!(
-                " {}{}{}{}{} ",
-                left_output, bg_escape, padding_str, hint_part, bg_escape
+                " {}{}{}{}{}{} ",
+                left_output,
+                bg_escape,
+                " ".repeat(padding),
+                mode_hint.part,
+                bg_escape,
+                host_part
             )
         } else {
-            format!(" {}{}{} ", left_output, bg_escape, padding_str)
+            let padding = usable_cols.saturating_sub(left_width);
+            format!(" {}{}{} ", left_output, bg_escape, " ".repeat(padding))
         };
 
         match background {

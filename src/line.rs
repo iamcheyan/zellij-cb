@@ -276,7 +276,7 @@ pub fn tab_line(
 
 pub fn tab_line_suffix(
     hostname: String,
-    datetime: String,
+    ip_address: String,
     _cols: usize,
     user_conf: UserConfiguration,
 ) -> Vec<LinePart> {
@@ -285,18 +285,18 @@ pub fn tab_line_suffix(
     let bg_color = user_conf.color_bg;
     let fg_color = user_conf.color_fg;
 
-    // Build the full right-side text: "hostname"  HH:MM  DD-Mon-YY
+    // Build the full right-side text: "hostname"  ip-address.
     let mut right_text = String::new();
 
     if !hostname.is_empty() {
         right_text.push_str(&format!("\"{}\"", hostname));
     }
 
-    if !datetime.is_empty() {
+    if !ip_address.is_empty() {
         if !right_text.is_empty() {
             right_text.push_str("  ");
         }
-        right_text.push_str(&datetime);
+        right_text.push_str(&ip_address);
     }
 
     if !right_text.is_empty() {
