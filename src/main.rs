@@ -31,6 +31,7 @@ struct State {
     hostname: String,
     ip_address: String,
     host_info_requested: bool,
+    clock: String,
 }
 
 register_plugin!(State);
@@ -210,6 +211,12 @@ fn request_host_info() {
     }
 }
 
+fn request_clock() {
+    let mut clock_context = BTreeMap::new();
+    clock_context.insert("type".to_string(), "clock".to_string());
+    run_command(&["date", "+%Y-%m-%d %H:%M"], clock_context);
+}
+
 fn update_host_info(state: &mut State, stdout: &[u8], context: &BTreeMap<String, String>) -> bool {
     match context.get("type").map(String::as_str) {
         Some("hostname") => parse_hostname(stdout)
@@ -222,20 +229,26 @@ fn update_host_info(state: &mut State, stdout: &[u8], context: &BTreeMap<String,
     }
 }
 
+fn update_clock(state: &mut State, stdout: &[u8], context: &BTreeMap<String, String>) -> bool {
+    if context.get("type").map(String::as_str) != Some("clock") {
+        return false;
+    }
+    let clock = String::from_utf8_lossy(stdout).trim().to_string();
+    if clock.is_empty() || clock == state.clock {
+        return false;
+    }
+    state.clock = clock;
+    true
+}
+
 impl ZellijPlugin for State {
     fn load(&mut self, configuration: BTreeMap<String, String>) {
         self.configuration = configuration;
-        let mut permissions = vec![
+        let permissions = vec![
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
+            PermissionType::RunCommands,
         ];
-        if UserConfiguration::get_bool_from_configuration(
-            &self.configuration,
-            "DisplayHostInfo",
-            false,
-        ) {
-            permissions.push(PermissionType::RunCommands);
-        }
         request_permission(&permissions);
         subscribe(&[
             EventType::TabUpdate,
@@ -243,6 +256,7 @@ impl ZellijPlugin for State {
             EventType::Mouse,
             EventType::PermissionRequestResult,
             EventType::RunCommandResult,
+            EventType::Timer,
         ]);
     }
 
@@ -250,7 +264,12 @@ impl ZellijPlugin for State {
         let mut should_render = false;
         match event {
             Event::RunCommandResult(_exit_code, stdout, _stderr, context) => {
-                should_render = update_host_info(self, &stdout, &context);
+                should_render = update_host_info(self, &stdout, &context)
+                    || update_clock(self, &stdout, &context);
+            }
+            Event::Timer(_) => {
+                request_clock();
+                set_timeout(60.0);
             }
             Event::ModeUpdate(mode_info) => {
                 self.user_configuration = UserConfiguration::populate_from_configuration(
@@ -291,6 +310,8 @@ impl ZellijPlugin for State {
                     request_host_info();
                     self.host_info_requested = true;
                 }
+                request_clock();
+                set_timeout(60.0);
             }
             _ => {
                 eprintln!("Got unrecognized event: {:?}", event);
@@ -323,7 +344,7 @@ impl ZellijPlugin for State {
 
         // Reserve 2 chars for left/right padding.
         let usable_cols = cols.saturating_sub(2);
-        let mode_hint = get_mode_hint(self.mode_info.mode, self.user_configuration.clone());
+        let clock = get_clock(self.clock.clone(), self.user_configuration.clone());
         let host_line = if self.user_configuration.display_host_info {
             tab_line_suffix(
                 self.hostname.clone(),
@@ -338,7 +359,7 @@ impl ZellijPlugin for State {
         };
         let host_width = host_line.as_ref().map_or(0, |part| part.len);
         let host_gap = if host_width > 0 { 2 } else { 0 };
-        let reserved_right_width = mode_hint.len + host_gap + host_width;
+        let reserved_right_width = clock.len + host_gap + host_width;
 
         // Build left side (session name + tabs), leaving room for hints and host info.
         let left_line = tab_line(
@@ -377,7 +398,7 @@ impl ZellijPlugin for State {
                 left_output,
                 bg_escape,
                 " ".repeat(padding),
-                mode_hint.part,
+                clock.part,
                 bg_escape,
                 host_part
             )
@@ -397,29 +418,11 @@ impl ZellijPlugin for State {
     }
 }
 
-fn get_mode_hint(mode: InputMode, user_conf: UserConfiguration) -> LinePart {
+fn get_clock(clock: String, user_conf: UserConfiguration) -> LinePart {
     let bg_color = user_conf.color_bg;
     let fg_color = user_conf.color_fg;
-
-    let text = match mode {
-        InputMode::Normal => "g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION",
-        InputMode::Locked => "g:UNLOCK",
-        InputMode::Pane => "[PANE] n:New d:Down r:Right x:Close f:Full p:Next h/j/k/l:Move",
-        InputMode::Tab => "[TAB] n:New x:Close r:Rename h/l:Move s:Sync",
-        InputMode::Resize => "[RESIZE] h/j/k/l or +/-: Resize",
-        InputMode::Move => "[MOVE] h/j/k/l: Move Pane",
-        InputMode::Scroll => "[SCROLL] u/d: Half Pg U/D Up/Down /: Search",
-        InputMode::Search => "[SEARCH] Enter: Search n: Next p: Prev",
-        InputMode::EnterSearch => "[SEARCH] Type term, then press Enter",
-        InputMode::RenameTab => "[RENAME TAB] Type name, then press Enter",
-        InputMode::RenamePane => "[RENAME PANE] Type name, then press Enter",
-        InputMode::Session => "[SESSION] d: Detach w: Managers",
-        InputMode::Tmux => "[TMUX] d: Detach ?: Help",
-        _ => "Press Esc to exit mode",
-    };
-
-    let len = text.len();
-    let styled = style!(fg_color, bg_color).bold().paint(text);
+    let len = clock.len();
+    let styled = style!(fg_color, bg_color).bold().paint(clock);
     LinePart {
         part: styled.to_string(),
         len,

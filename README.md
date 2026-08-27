@@ -8,7 +8,7 @@ A fork of [ndavd/zellij-cb](https://github.com/ndavd/zellij-cb). Built on top of
 
 - Displays tabs in tmux style: e.g. `[1]name*`
 - Green background with dark text for a tmux-inspired look
-- Shows available keybindings for the current mode in the status bar
+- Shows the local date and time to the minute on the right side of the status bar
 - Displays the session name on the left with improved layout and alignment
 - Optionally displays the host name and IPv4 address using platform-compatible command fallbacks.
 
@@ -79,19 +79,15 @@ layout {
 | `FgColor` | Foreground color (8-bit or RGB) | `0` |
 | `BgColor` | Background color (8-bit or RGB) | `10` |
 
-## Mode hint bar
+## Status bar clock
 
-The hint bar at the bottom shows context-sensitive keybindings depending on the current mode:
+The right side shows the local date and time in `YYYY-MM-DD HH:MM` format. It is
+refreshed once per minute.
 
-| Mode | Hints |
+| Side | Content |
 |---|---|
-| Normal | `g:LOCK p:PANE t:TAB n:RESIZE h:MOVE s:SCROLL o:SESSION` |
-| Locked | `g:UNLOCK` |
-| Pane | `[PANE] n:New d:Down r:Right x:Close f:Full p:Next` |
-| Tab | `[TAB] n:New x:Close r:Rename h/l:Move s:Sync` |
-| Resize | `[RESIZE] h/j/k/l or +/-: Resize` |
-| Move | `[MOVE] h/j/k/l: Move Pane` |
-| Scroll | `[SCROLL] u/d: Half Pg U/D Up/Down /: Search` |
+| Left | Session name and tabs |
+| Right | Date and time, e.g. `2026-08-26 23:45` |
 
 ## Notes
 
