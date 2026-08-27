@@ -71,14 +71,19 @@ jobs:
           git push origin "${tag}"
 
       - name: Install Rust
-        if: steps.release.outputs.exists != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
 
       - name: Build release binary
-        if: steps.release.outputs.exists != 'true'
         run: cargo build --release --target wasm32-wasip1
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zellij-cb-wasm-${{ github.sha }}
+          path: ./target/wasm32-wasip1/release/zellij-cb.wasm
+          if-no-files-found: error
 
       - name: Create release
         if: steps.release.outputs.exists != 'true'
