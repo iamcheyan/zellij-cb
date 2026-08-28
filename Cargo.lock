@@ -3001,7 +3001,7 @@ dependencies = [
 
 [[package]]
 name = "zellij-cb"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "ansi_term",
  "colored",
