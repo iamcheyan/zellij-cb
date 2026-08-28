@@ -212,9 +212,26 @@ fn request_host_info() {
 }
 
 fn request_clock() {
-    let mut clock_context = BTreeMap::new();
-    clock_context.insert("type".to_string(), "clock".to_string());
-    run_command(&["date", "+%Y-%m-%d %H:%M"], clock_context);
+    // `run_command` executes the program directly on the host. Keep both
+    // commands here because the plugin is one WASM artifact used on Unix and
+    // Windows; Windows does not provide GNU `date`.
+    let mut unix_clock_context = BTreeMap::new();
+    unix_clock_context.insert("type".to_string(), "clock".to_string());
+    run_command(&["date", "+%Y-%m-%d %H:%M"], unix_clock_context);
+
+    let mut windows_clock_context = BTreeMap::new();
+    windows_clock_context.insert("type".to_string(), "clock".to_string());
+    run_command(
+        &[
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-Date -Format 'yyyy-MM-dd HH:mm'",
+        ],
+        windows_clock_context,
+    );
 }
 
 fn update_host_info(state: &mut State, stdout: &[u8], context: &BTreeMap<String, String>) -> bool {
@@ -234,11 +251,25 @@ fn update_clock(state: &mut State, stdout: &[u8], context: &BTreeMap<String, Str
         return false;
     }
     let clock = String::from_utf8_lossy(stdout).trim().to_string();
-    if clock.is_empty() || clock == state.clock {
+    if !is_valid_clock(&clock) || clock == state.clock {
         return false;
     }
     state.clock = clock;
     true
+}
+
+fn is_valid_clock(clock: &str) -> bool {
+    clock.len() == 16
+        && clock
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| match index {
+                4 | 7 => *byte == b'-',
+                10 => *byte == b' ',
+                13 => *byte == b':',
+                _ => byte.is_ascii_digit(),
+            })
 }
 
 impl ZellijPlugin for State {
