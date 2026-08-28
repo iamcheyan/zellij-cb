@@ -31,8 +31,8 @@ jobs:
             tag="${GITHUB_REF_NAME}"
             version="${tag#v}"
           else
-            version="main-latest"
-            tag="main-latest"
+            version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+            tag="v${version}"
           fi
 
           if [[ -z "${version}" || -z "${tag}" ]]; then
@@ -55,6 +55,21 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Create version tag
+        if: github.ref_type != 'tag' && steps.release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${tag}" "${GITHUB_SHA}"
+          git push origin "${tag}"
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -70,14 +85,28 @@ jobs:
           path: ./target/wasm32-wasip1/release/zellij-cb.wasm
           if-no-files-found: error
 
-      - name: Create release
+      - name: Create versioned release
+        if: github.ref_type == 'tag' || steps.release.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ github.ref_type == 'tag' && steps.version.outputs.tag || 'main-latest' }}
-          prerelease: ${{ github.ref_type != 'tag' }}
-          make_latest: ${{ github.ref_type == 'tag' && 'true' || 'false' }}
+          name: ${{ steps.version.outputs.tag }}
+          prerelease: false
+          make_latest: true
           generate_release_notes: true
+          overwrite_files: true
+          files: |
+            ./target/wasm32-wasip1/release/zellij-cb.wasm
+
+      - name: Update rolling main release
+        if: github.ref_type != 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: main-latest
+          name: main-latest
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
           overwrite_files: true
           files: |
             ./target/wasm32-wasip1/release/zellij-cb.wasm
