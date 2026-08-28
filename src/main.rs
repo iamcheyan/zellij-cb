@@ -217,7 +217,7 @@ fn request_clock() {
     // Windows; Windows does not provide GNU `date`.
     let mut unix_clock_context = BTreeMap::new();
     unix_clock_context.insert("type".to_string(), "clock".to_string());
-    run_command(&["date", "+%Y-%m-%d %H:%M"], unix_clock_context);
+    run_command(&["date", "+%u %Y-%m-%d %H:%M"], unix_clock_context);
 
     let mut windows_clock_context = BTreeMap::new();
     windows_clock_context.insert("type".to_string(), "clock".to_string());
@@ -228,7 +228,7 @@ fn request_clock() {
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "Get-Date -Format 'yyyy-MM-dd HH:mm'",
+            "'{0} {1:yyyy-MM-dd HH:mm}' -f ((([int](Get-Date).DayOfWeek + 6) % 7) + 1), (Get-Date)",
         ],
         windows_clock_context,
     );
@@ -250,17 +250,39 @@ fn update_clock(state: &mut State, stdout: &[u8], context: &BTreeMap<String, Str
     if context.get("type").map(String::as_str) != Some("clock") {
         return false;
     }
-    let clock = String::from_utf8_lossy(stdout).trim().to_string();
-    if !is_valid_clock(&clock) || clock == state.clock {
+    let Some(clock) = format_clock(stdout) else {
+        return false;
+    };
+    if clock == state.clock {
         return false;
     }
     state.clock = clock;
     true
 }
 
-fn is_valid_clock(clock: &str) -> bool {
-    clock.len() == 16
-        && clock
+fn format_clock(stdout: &[u8]) -> Option<String> {
+    let raw = String::from_utf8_lossy(stdout).trim().to_string();
+    let (weekday, datetime) = raw.split_once(' ')?;
+    let weekday = weekday.parse::<u8>().ok()?;
+    if !(1..=7).contains(&weekday) || !is_valid_datetime(datetime) {
+        return None;
+    }
+    let weekday_name = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
+    .get((weekday - 1) as usize)?;
+    Some(format!("{weekday_name} {datetime}"))
+}
+
+fn is_valid_datetime(datetime: &str) -> bool {
+    datetime.len() == 16
+        && datetime
             .as_bytes()
             .iter()
             .enumerate()
