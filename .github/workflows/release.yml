@@ -31,8 +31,8 @@ jobs:
             tag="${GITHUB_REF_NAME}"
             version="${tag#v}"
           else
-            version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
-            tag="v${version}"
+            version="main-latest"
+            tag="main-latest"
           fi
 
           if [[ -z "${version}" || -z "${tag}" ]]; then
@@ -55,21 +55,6 @@ jobs:
             echo "exists=false" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Create release tag
-        if: github.ref_type != 'tag' && steps.release.outputs.exists != 'true'
-        shell: bash
-        run: |
-          tag="${{ steps.version.outputs.tag }}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
-            echo "Tag ${tag} already exists"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "${tag}" "${GITHUB_SHA}"
-          git push origin "${tag}"
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -89,6 +74,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ github.ref_type == 'tag' && steps.version.outputs.tag || 'main-latest' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          make_latest: ${{ github.ref_type == 'tag' && 'true' || 'false' }}
           generate_release_notes: true
           overwrite_files: true
           files: |
