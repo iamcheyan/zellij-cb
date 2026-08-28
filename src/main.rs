@@ -277,7 +277,38 @@ fn format_clock(stdout: &[u8]) -> Option<String> {
         "Sunday",
     ]
     .get((weekday - 1) as usize)?;
-    Some(format!("{weekday_name} {datetime}"))
+    let year = &datetime[0..4];
+    let month = datetime[5..7].parse::<u8>().ok()?;
+    let day = datetime[8..10].parse::<u8>().ok()?;
+    let hour = datetime[11..13].parse::<u8>().ok()?;
+    let minute = &datetime[14..16];
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 {
+        return None;
+    }
+    let month_name = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
+    .get((month - 1) as usize)?;
+    let (hour_12, period) = match hour {
+        0 => (12, "AM"),
+        1..=11 => (hour, "AM"),
+        12 => (12, "PM"),
+        _ => (hour - 12, "PM"),
+    };
+    Some(format!(
+        "{weekday_name}, {month_name} {day}, {year} {hour_12}:{minute} {period}"
+    ))
 }
 
 fn is_valid_datetime(datetime: &str) -> bool {

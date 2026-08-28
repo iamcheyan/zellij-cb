@@ -81,13 +81,14 @@ layout {
 
 ## Status bar clock
 
-The right side shows the local date and time with the full English weekday name
-in `DDDD YYYY-MM-DD HH:MM` format. It is refreshed once per minute.
+The right side shows the local date and time in a full English (US) format with
+the weekday and month names, such as `Friday, August 28, 2026 9:00 PM`. It is
+refreshed once per minute.
 
 | Side | Content |
 |---|---|
 | Left | Session name and tabs |
-| Right | Weekday, date and time, e.g. `Wednesday 2026-08-26 23:45` |
+| Right | Full English date and time, e.g. `Wednesday, August 26, 2026 11:45 PM` |
 
 ## Notes
 
