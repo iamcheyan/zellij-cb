@@ -1,6 +1,6 @@
 [package]
 name = "zellij-cb"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["Nuno David <email@ndavd.com>"]
 edition = "2021"
 license = "MIT"

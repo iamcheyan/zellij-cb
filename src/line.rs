@@ -233,8 +233,8 @@ pub fn tab_line(
     active_tab_index: usize,
     cols: usize,
     user_conf: UserConfiguration,
-    _mode: InputMode,
-    _session_directory: String,
+    mode: InputMode,
+    session_directory: String,
 ) -> Vec<LinePart> {
     let mut tabs_after_active = all_tabs.split_off(active_tab_index);
     let mut tabs_before_active = all_tabs;
@@ -244,9 +244,16 @@ pub fn tab_line(
         tabs_before_active.pop().unwrap()
     };
 
-    // Session name prefix width
-    let session_text = format!("{} ", session_name);
-    let session_len = session_text.len();
+    // Keep the session name and mode indicator together. In particular, this
+    // renders `g:LOCK` while Zellij is in Locked mode.
+    let mut prefix_parts = tab_line_prefix(
+        session_name,
+        mode,
+        user_conf.clone(),
+        cols,
+        session_directory,
+    );
+    let prefix_len: usize = prefix_parts.iter().map(|part| part.len).sum();
 
     // Tabs fill remaining space after session prefix
     let mut tabs_to_render = vec![active_tab];
@@ -255,21 +262,12 @@ pub fn tab_line(
         &mut tabs_before_active,
         &mut tabs_after_active,
         &mut tabs_to_render,
-        cols.saturating_sub(session_len),
+        cols.saturating_sub(prefix_len),
         user_conf.clone(),
     );
 
-    // Prepend session name
-    let bg_color = user_conf.color_bg;
-    let fg_color = user_conf.color_fg;
-    let session_styled = style!(fg_color, bg_color).bold().paint(session_text);
-    let session_part = LinePart {
-        part: session_styled.to_string(),
-        len: session_len,
-        tab_index: None,
-    };
-
-    let mut result = vec![session_part];
+    let mut result = Vec::new();
+    result.append(&mut prefix_parts);
     result.append(&mut tabs_to_render);
     result
 }
