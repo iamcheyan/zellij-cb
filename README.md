@@ -42,13 +42,25 @@ The script installs the `wasm32-wasip1` target when needed and copies the plugin
 ## Configuration
 
 Register the plugin in `~/.config/zellij/config.kdl` on Unix-like systems, or
-`%APPDATA%\zellij\config.kdl` on Windows:
+`%APPDATA%\zellij\config.kdl` on Windows.
+
+Unix-like systems:
 
 ```kdl
 plugins {
     zellij-cb location="file:~/.config/zellij/plugins/zellij-cb.wasm"
 }
 ```
+
+Windows (replace `<USER>` with your Windows user name):
+
+```kdl
+plugins {
+    zellij-cb location="file:C:/Users/<USER>/AppData/Roaming/zellij/plugins/zellij-cb.wasm"
+}
+```
+
+The included `build.ps1` installs the WASM file to the Windows path above.
 
 Use it in a layout:
 
@@ -76,6 +88,7 @@ layout {
 | `DefaultTabName` | Default name for unnamed tabs | `tab` |
 | `DisplaySessionDirectory` | Whether to show the session directory in the status bar | `false` |
 | `DisplayHostInfo` | Whether to show the host name and IPv4 address | `false` |
+| `LockedModeLabel` | Label shown while Zellij shortcuts are locked with `Ctrl-g` | `g:LOCK` |
 | `FgColor` | Foreground color (8-bit or RGB) | `0` |
 | `BgColor` | Background color (8-bit or RGB) | `10` |
 
@@ -89,6 +102,26 @@ refreshed once per minute.
 |---|---|
 | Left | Session name and tabs |
 | Right | Full English date and time, e.g. `Wednesday, August 26, 2026 11:45 PM` |
+
+## Locked shortcut indicator
+
+Pressing `Ctrl-g` enters Zellij's locked mode. The status bar then shows the
+tmux-style `g:LOCK` indicator next to the session and tabs, making it clear that
+Zellij shortcuts are temporarily disabled. Press `Ctrl-g` again to unlock.
+
+The label is platform-independent and uses ASCII characters so its display width
+is stable in Windows Terminal, Linux terminals, and macOS terminals. It can be
+customized in the layout:
+
+```kdl
+plugin location="zellij-cb" {
+    LockedModeLabel "LOCKED"
+}
+```
+
+Host information also uses platform-compatible commands: `ipconfig` on Windows
+and Unix network command fallbacks elsewhere. The clock uses PowerShell on
+Windows and `date` on Unix-like systems.
 
 ## Notes
 

@@ -126,7 +126,9 @@ impl UserConfiguration {
         .map(|mode| {
             let mode_string = format!("{:?}", mode);
             let fallback = if mode == InputMode::Locked {
-                String::new()
+                // Keep the lock indicator short and ASCII-only so its width is
+                // stable across terminals and platforms, including Windows.
+                "g:LOCK".to_string()
             } else {
                 mode_string.chars().next().unwrap().to_uppercase().collect()
             };
